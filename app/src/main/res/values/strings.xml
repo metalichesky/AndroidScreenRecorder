@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">ScreenRecorder</string>
+    <string name="notification_text">Tap to open app</string>
+    <string name="service_running">Service Running</string>
+    <string name="start_record_or_close_service">Start record or close service</string>
+    <string name="start_record">Start record</string>
+    <string name="stop_record">Stop record</string>
+    <string name="record">Record</string>
+    <string name="recording">Recording</string>
+    <string name="stop">Stop</string>
+    <string name="close">Close</string>
+</resources>

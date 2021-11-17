@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <files-path name="public_images" path="Pictures" />
+    <external-files-path name="public_images" path="Pictures" />
+    <files-path name="public_videos" path="Videos" />
+    <external-files-path name="public_videos" path="Videos" />
+    <cache-path name="cache_files" path="/" />
+    <external-cache-path name="screen_recorder_cache" path="ScreenRecorderCache"/>
+    <external-cache-path name="external_cache_files" path="/" />
+</paths>
