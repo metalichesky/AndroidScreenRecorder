@@ -92,26 +92,39 @@ class ScreenRecordingService : Service(), ScreenRecordingServiceBridge {
 
     private fun startAsForeground() {
         notificationId = NotificationUtils.generateNotificationId()
-        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                NotificationUtils.CHANNEL_DEFAULT_ID,
-                NotificationUtils.CHANNEL_DEFAULT_NAME,
-                NotificationManager.IMPORTANCE_DEFAULT
-            )
-            val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.createNotificationChannel(channel)
-            NotificationCompat.Builder(this, NotificationUtils.CHANNEL_DEFAULT_ID)
-        } else {
-            NotificationCompat.Builder(this)
-        }
+        val startIntent = Intent(this, ScreenRecordingService::class.java)
+        startIntent.action = ACTION_START_RECORDING
+        val startPendingIntent = PendingIntent.getService(
+            this, COMMAND_START_RECORDING, startIntent, 0
+        )
+        val closeIntent = Intent(this, ScreenRecordingService::class.java)
+        closeIntent.action = ACTION_STOP_SERVICE
+        val closePendingIntent = PendingIntent.getService(
+            this, COMMAND_STOP_SERVICE, closeIntent, 0
+        )
         startForeground(
             notificationId,
-            createServiceNotificationBuilder(applicationContext)?.build()
+            createServiceNotificationBuilder(applicationContext)?.addAction(
+                R.drawable.ic_stop,
+                getString(R.string.stop_record),
+                startPendingIntent
+            )?.addAction(
+                R.drawable.ic_close,
+                getString(R.string.close),
+                closePendingIntent
+            )?.build()
         )
+    }
+
+    fun stopService() {
+        val closeIntent = Intent(this, ScreenRecordingService::class.java)
+        closeIntent.action = ACTION_STOP_SERVICE
+        this.startActivity(closeIntent)
     }
 
     override fun stopService(name: Intent?): Boolean {
         stopRecording(true)
+        closeServiceNotification(this)
         return super.stopService(name)
     }
 
@@ -138,6 +151,12 @@ class ScreenRecordingService : Service(), ScreenRecordingServiceBridge {
                 val destroyMediaProjection =
                     intent.getBooleanExtra(ATTR_DESTROY_MEDIA_PROJECTION, false)
                 stopRecording(destroyMediaProjection)
+            }
+            ACTION_STOP_SERVICE -> {
+                stopRecording(true)
+                closeServiceNotification(this)
+                stopForeground(true)
+                stopSelfResult(startId)
             }
         }
         return START_STICKY
@@ -194,7 +213,7 @@ class ScreenRecordingService : Service(), ScreenRecordingServiceBridge {
         val closeIntent = Intent(this, ScreenRecordingService::class.java)
         closeIntent.action = ACTION_STOP_SERVICE
         val closePendingIntent = PendingIntent.getService(
-            context, COMMAND_STOP_SERVICE, stopIntent, 0
+            context, COMMAND_STOP_SERVICE, closeIntent, 0
         )
         when (recordingState) {
             RecordingState.IDLE -> {

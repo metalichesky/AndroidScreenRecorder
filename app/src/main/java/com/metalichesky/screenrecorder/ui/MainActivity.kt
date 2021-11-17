@@ -147,19 +147,27 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun tryStartRecording() {
-        val permissions = PermissionUtils.RECORD_AUDIO_PERMISSIONS + PermissionUtils.READ_WRITE_PERMISSIONS
-        val permissionsGranted = PermissionUtils.isPermissionsGranted(this, permissions)
-        val mediaProjectionConfigured = serviceController.isMediaProjectionConfigured()
-        val recorderConfigured = serviceController.isRecorderConfigured()
-        if (permissionsGranted && !recorderConfigured) {
-            serviceController.setupRecorder(prepareRecordParams())
-        }
-        if (permissionsGranted && mediaProjectionConfigured) {
-            startRecording()
-        } else if (!permissionsGranted) {
-            permissionsLauncher.launch(permissions)
-        } else if (!mediaProjectionConfigured) {
-            recordScreenLauncher.launch(IntentUtils.getScreenCaptureIntent(this))
+        lifecycleScope.launch {
+            while (isActive && !serviceController.connected) {
+                serviceController.startService()
+            }
+            if (!isActive) return@launch
+
+            val permissions =
+                PermissionUtils.RECORD_AUDIO_PERMISSIONS + PermissionUtils.READ_WRITE_PERMISSIONS
+            val permissionsGranted = PermissionUtils.isPermissionsGranted(this@MainActivity, permissions)
+            val mediaProjectionConfigured = serviceController.isMediaProjectionConfigured()
+            val recorderConfigured = serviceController.isRecorderConfigured()
+            if (permissionsGranted && !recorderConfigured) {
+                serviceController.setupRecorder(prepareRecordParams())
+            }
+            if (permissionsGranted && mediaProjectionConfigured) {
+                startRecording()
+            } else if (!permissionsGranted) {
+                permissionsLauncher.launch(permissions)
+            } else if (!mediaProjectionConfigured) {
+                recordScreenLauncher.launch(IntentUtils.getScreenCaptureIntent(this@MainActivity))
+            }
         }
     }
 
