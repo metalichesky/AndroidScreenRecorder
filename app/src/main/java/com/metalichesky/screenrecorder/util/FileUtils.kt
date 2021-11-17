@@ -123,7 +123,7 @@ internal object FileUtils {
         values.put(MediaStore.Video.Media.TITLE, title)
         values.put(MediaStore.Video.Media.DESCRIPTION, description)
         if (Build.VERSION.SDK_INT >= 29) {
-            values.put(MediaStore.Video.Media.DATE_TAKEN, System.currentTimeMillis())
+            values.put(MediaStore.Video.Media.DATE_TAKEN, file.lastModified())
         }
         values.put(MediaStore.Video.Media.MIME_TYPE, mimeType)
         values.put(MediaStore.MediaColumns.DATA, file.absolutePath)

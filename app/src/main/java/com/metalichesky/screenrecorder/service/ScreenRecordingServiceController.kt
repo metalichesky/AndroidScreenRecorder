@@ -54,8 +54,8 @@ class ScreenRecordingServiceController(
             listener?.onRecordingStarted()
         }
 
-        override fun onRecordingStopped() {
-            listener?.onRecordingStopped()
+        override fun onRecordingStopped(filePath: String?) {
+            listener?.onRecordingStopped(filePath)
         }
 
         override fun onServiceClosed() {

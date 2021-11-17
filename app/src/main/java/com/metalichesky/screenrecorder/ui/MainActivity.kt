@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.view.WindowManager
 import android.widget.Toast
@@ -17,11 +18,13 @@ import com.metalichesky.screenrecorder.model.ScreenRecordParams
 import com.metalichesky.screenrecorder.repo.VideoRepo
 import com.metalichesky.screenrecorder.service.ScreenRecordingServiceController
 import com.metalichesky.screenrecorder.service.ScreenRecordingServiceListener
+import com.metalichesky.screenrecorder.util.FileUtils
 import com.metalichesky.screenrecorder.util.IntentUtils
 import com.metalichesky.screenrecorder.util.PermissionUtils
 import com.metalichesky.screenrecorder.util.Size
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -82,8 +85,9 @@ class MainActivity : AppCompatActivity() {
                 binding.toggle.isChecked = true
             }
 
-            override fun onRecordingStopped() {
+            override fun onRecordingStopped(filePath: String?) {
                 binding.toggle.isChecked = false
+                Log.d(LOG_TAG, "onRecordingStopped() saved to ${filePath}")
             }
 
             override fun onNeedSetupMediaProjection() {

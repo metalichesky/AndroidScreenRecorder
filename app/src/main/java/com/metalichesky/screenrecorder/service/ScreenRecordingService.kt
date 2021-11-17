@@ -24,9 +24,11 @@ import com.metalichesky.screenrecorder.model.control.AudioSource
 import com.metalichesky.screenrecorder.model.control.VideoCodec
 import com.metalichesky.screenrecorder.ui.MainActivity
 import com.metalichesky.screenrecorder.util.Constants
+import com.metalichesky.screenrecorder.util.FileUtils
 import com.metalichesky.screenrecorder.util.NotificationUtils
 import com.metalichesky.screenrecorder.util.Size
 import com.metalichesky.screenrecorder.util.video.DeviceEncoders
+import java.io.File
 import java.io.IOException
 
 
@@ -296,7 +298,7 @@ class ScreenRecordingService : Service(), ScreenRecordingServiceBridge {
             } else {
                 params.videoBitRate
             }
-            val videoCodec = when(params.videoCodec.type) {
+            val videoCodec = when (params.videoCodec.type) {
                 VideoCodec.Type.H_263 -> MediaRecorder.VideoEncoder.H263
                 VideoCodec.Type.H_264 -> MediaRecorder.VideoEncoder.H264
                 VideoCodec.Type.HEVC -> MediaRecorder.VideoEncoder.HEVC
@@ -304,7 +306,7 @@ class ScreenRecordingService : Service(), ScreenRecordingServiceBridge {
                 VideoCodec.Type.MPEG_4_SP -> MediaRecorder.VideoEncoder.MPEG_4_SP
                 else -> MediaRecorder.VideoEncoder.H264
             }
-            val fileFormat: Int = when(params.videoCodec.type) {
+            val fileFormat: Int = when (params.videoCodec.type) {
                 VideoCodec.Type.H_263 -> MediaRecorder.OutputFormat.MPEG_4
                 VideoCodec.Type.H_264 -> MediaRecorder.OutputFormat.MPEG_4
                 VideoCodec.Type.HEVC -> MediaRecorder.OutputFormat.MPEG_4
@@ -314,8 +316,9 @@ class ScreenRecordingService : Service(), ScreenRecordingServiceBridge {
             }
 
             var audioBitRate = params.audioBitRate
-            val hasAudio = params.audioChannelsCount > 0 && params.audioSource.type != AudioSource.Type.NONE
-            val audioCodec = when(params.audioCodec.type) {
+            val hasAudio =
+                params.audioChannelsCount > 0 && params.audioSource.type != AudioSource.Type.NONE
+            val audioCodec = when (params.audioCodec.type) {
                 AudioCodec.Type.AAC -> MediaRecorder.AudioEncoder.AAC
                 AudioCodec.Type.AAC_ELD -> MediaRecorder.AudioEncoder.AAC_ELD
                 AudioCodec.Type.HE_AAC -> MediaRecorder.AudioEncoder.HE_AAC
@@ -345,9 +348,11 @@ class ScreenRecordingService : Service(), ScreenRecordingServiceBridge {
                 var encodersFound = false
 
                 while (!encodersFound) {
-                    Log.d(LOG_TAG, "setupRecorder() Checking DeviceEncoders... " +
+                    Log.d(
+                        LOG_TAG, "setupRecorder() Checking DeviceEncoders... " +
                                 "videoOffset:$videoEncoderOffset " +
-                                "audioOffset:$audioEncoderOffset")
+                                "audioOffset:$audioEncoderOffset"
+                    )
                     var encoders: DeviceEncoders? = null
                     try {
                         encoders = DeviceEncoders(
@@ -356,8 +361,10 @@ class ScreenRecordingService : Service(), ScreenRecordingServiceBridge {
                             videoEncoderOffset, audioEncoderOffset
                         )
                     } catch (e: RuntimeException) {
-                        Log.w(LOG_TAG, "setupRecorder() Could not respect encoders parameters. " +
-                                    "Trying again without checking encoders.")
+                        Log.w(
+                            LOG_TAG, "setupRecorder() Could not respect encoders parameters. " +
+                                    "Trying again without checking encoders."
+                        )
                         break
                     }
                     try {
@@ -380,10 +387,16 @@ class ScreenRecordingService : Service(), ScreenRecordingServiceBridge {
                         }
                         encodersFound = true
                     } catch (videoException: DeviceEncoders.VideoException) {
-                        Log.i(LOG_TAG, "setupRecorder() Got VideoException ${videoException.message}")
+                        Log.i(
+                            LOG_TAG,
+                            "setupRecorder() Got VideoException ${videoException.message}"
+                        )
                         videoEncoderOffset++
                     } catch (audioException: DeviceEncoders.AudioException) {
-                        Log.i(LOG_TAG, "setupRecorder() Got AudioException: ${audioException.message}")
+                        Log.i(
+                            LOG_TAG,
+                            "setupRecorder() Got AudioException: ${audioException.message}"
+                        )
                         audioEncoderOffset++
                     }
                 }
@@ -491,7 +504,14 @@ class ScreenRecordingService : Service(), ScreenRecordingServiceBridge {
         try {
             mediaRecorder?.stop()
             recordingState = RecordingState.IDLE
-            listener?.onRecordingStopped()
+            val resultFile = File(recordParams?.videoFilePath ?: "")
+            val mimeType = recordParams?.videoCodec?.type?.mimeType
+            FileUtils.addVideoFileToPublic(
+                context = this,
+                file = resultFile,
+                mimeType = mimeType
+            )
+            listener?.onRecordingStopped(recordParams?.videoFilePath)
             updateServiceNotification(this)
             destroyVirtualDisplay()
             destroyRecorder()
