@@ -28,6 +28,7 @@ import com.metalichesky.screenrecorder.util.FileUtils
 import com.metalichesky.screenrecorder.util.NotificationUtils
 import com.metalichesky.screenrecorder.util.Size
 import com.metalichesky.screenrecorder.util.video.DeviceEncoders
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.IOException
 
@@ -37,6 +38,8 @@ class ScreenRecordingService : Service(), ScreenRecordingServiceBridge {
         val LOG_TAG = ScreenRecordingService.javaClass.simpleName
         const val CHECK_DEVICE_ENCODERS = true
 
+        const val EXTRA_COMMAND_KEY = "COMMAND_KEY"
+        const val ACTION_START_SERVICE = "ACTION_START_SERVICE"
         const val ACTION_SETUP_RECORDER = "ACTION_SETUP_RECORDER"
         const val ACTION_SETUP_MEDIA_PROJECTION = "ACTION_SETUP_MEDIA_PROJECTION"
         const val ACTION_START_RECORDING = "ACTION_START_RECORDING"
@@ -46,7 +49,8 @@ class ScreenRecordingService : Service(), ScreenRecordingServiceBridge {
         const val COMMAND_SETUP_MEDIA_PROJECTION = 1
         const val COMMAND_START_RECORDING = 2
         const val COMMAND_STOP_RECORDING = 3
-        const val COMMAND_STOP_SERVICE = 4
+        const val COMMAND_START_SERVICE = 4
+        const val COMMAND_STOP_SERVICE = 5
         const val ATTR_RECORD_PARAMS = "screen_record_params"
         const val ATTR_MEDIA_PROJECTION_PARAMS = "media_projection_params"
         const val ATTR_DESTROY_MEDIA_PROJECTION = "destroy_media_projection"
@@ -86,11 +90,10 @@ class ScreenRecordingService : Service(), ScreenRecordingServiceBridge {
 
     override fun onCreate() {
         Log.d(LOG_TAG, "onCreate()")
-        startAsForeground()
-        projectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
     }
 
-    private fun startAsForeground() {
+    private fun startService(startId: Int) {
+        Log.d(LOG_TAG, "startService() startId = $startId")
         notificationId = NotificationUtils.generateNotificationId()
         val startIntent = Intent(this, ScreenRecordingService::class.java)
         startIntent.action = ACTION_START_RECORDING
@@ -114,6 +117,8 @@ class ScreenRecordingService : Service(), ScreenRecordingServiceBridge {
                 closePendingIntent
             )?.build()
         )
+        projectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        updateServiceNotification(applicationContext)
     }
 
     fun stopService() {
@@ -125,6 +130,7 @@ class ScreenRecordingService : Service(), ScreenRecordingServiceBridge {
     override fun stopService(name: Intent?): Boolean {
         stopRecording(true)
         closeServiceNotification(this)
+        listener?.onServiceClosed()
         return super.stopService(name)
     }
 
@@ -135,6 +141,9 @@ class ScreenRecordingService : Service(), ScreenRecordingServiceBridge {
         val action = intent.action
         Log.d(LOG_TAG, "onStartCommand() action:$action")
         when (action) {
+            ACTION_START_SERVICE -> {
+                startService(startId)
+            }
             ACTION_SETUP_RECORDER -> {
                 val params = intent.getSerializableExtra(ATTR_RECORD_PARAMS) as ScreenRecordParams
                 setupRecorder(params)
@@ -157,6 +166,7 @@ class ScreenRecordingService : Service(), ScreenRecordingServiceBridge {
                 closeServiceNotification(this)
                 stopForeground(true)
                 stopSelfResult(startId)
+                listener?.onServiceClosed()
             }
         }
         return START_STICKY
@@ -521,7 +531,11 @@ class ScreenRecordingService : Service(), ScreenRecordingServiceBridge {
     private fun stopRecording(destroyMediaProjection: Boolean = false) {
         Log.d(LOG_TAG, "stopSharing()")
         try {
-            mediaRecorder?.stop()
+            try {
+                mediaRecorder?.stop()
+            } catch (ex: Exception) {
+                // ignore
+            }
             recordingState = RecordingState.IDLE
             val resultFile = File(recordParams?.videoFilePath ?: "")
             val mimeType = recordParams?.videoCodec?.type?.mimeType
@@ -537,8 +551,8 @@ class ScreenRecordingService : Service(), ScreenRecordingServiceBridge {
             if (destroyMediaProjection) {
                 destroyMediaProjection()
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
+        } catch (ex: Exception) {
+            Log.e(LOG_TAG, ex.message, ex)
         }
     }
 
@@ -555,7 +569,11 @@ class ScreenRecordingService : Service(), ScreenRecordingServiceBridge {
     }
 
     private fun destroyRecorder() {
-        mediaRecorder?.release()
+        try {
+            mediaRecorder?.release()
+        } catch (ex: Exception) {
+            Log.e(LOG_TAG, ex.message, ex)
+        }
         mediaRecorder = null
     }
 }

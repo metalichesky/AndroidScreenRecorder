@@ -22,19 +22,7 @@ class ScreenRecordingServiceController(
     }
 
     private var service: ScreenRecordingServiceBridge? = null
-    private var serviceConnection: ServiceConnection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            this@ScreenRecordingServiceController.service =
-                (service as? ScreenRecordingService.ServiceBinder)?.service
-            this@ScreenRecordingServiceController.service?.setListener(serviceListener)
-            Log.d(LOG_TAG, "onServiceConnected() name ${name?.className}")
-        }
-
-        override fun onServiceDisconnected(name: ComponentName?) {
-            this@ScreenRecordingServiceController.service = null
-            Log.d(LOG_TAG, "onServiceDisconnected() name ${name?.className}")
-        }
-    }
+    private var serviceConnection: ServiceConnection? = null
 
     val connected: Boolean
         get() {
@@ -70,13 +58,33 @@ class ScreenRecordingServiceController(
 
     suspend fun startService(): Boolean {
         if (connected) return true
-        val intent = Intent(context, ScreenRecordingService::class.java)
+        val intent = Intent(context, ScreenRecordingService::class.java).apply {
+            action = ScreenRecordingService.ACTION_START_SERVICE
+            putExtra(
+                ScreenRecordingService.EXTRA_COMMAND_KEY,
+                ScreenRecordingService.COMMAND_START_SERVICE
+            )
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             context.startForegroundService(intent)
         } else {
             context.startService(intent)
         }
         try {
+            val serviceConnection = object : ServiceConnection {
+                override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+                    this@ScreenRecordingServiceController.service =
+                        (service as? ScreenRecordingService.ServiceBinder)?.service
+                    this@ScreenRecordingServiceController.service?.setListener(serviceListener)
+                    Log.d(LOG_TAG, "onServiceConnected() name ${name?.className}")
+                }
+
+                override fun onServiceDisconnected(name: ComponentName?) {
+                    this@ScreenRecordingServiceController.service = null
+                    Log.d(LOG_TAG, "onServiceDisconnected() name ${name?.className}")
+                }
+            }
+            this.serviceConnection = serviceConnection
             context.bindService(
                 Intent(context, ScreenRecordingService::class.java),
                 serviceConnection,
@@ -100,7 +108,10 @@ class ScreenRecordingServiceController(
     fun stopService(): Boolean {
         if (!connected) return true
         try {
-            context.unbindService(serviceConnection)
+            serviceConnection?.let {
+                context.unbindService(it)
+            }
+            serviceConnection = null
         } catch (ex: Exception) {
             ex.printStackTrace()
         }

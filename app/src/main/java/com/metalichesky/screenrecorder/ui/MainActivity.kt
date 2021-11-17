@@ -22,6 +22,7 @@ import com.metalichesky.screenrecorder.util.FileUtils
 import com.metalichesky.screenrecorder.util.IntentUtils
 import com.metalichesky.screenrecorder.util.PermissionUtils
 import com.metalichesky.screenrecorder.util.Size
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
@@ -88,6 +89,8 @@ class MainActivity : AppCompatActivity() {
             override fun onRecordingStopped(filePath: String?) {
                 binding.toggle.isChecked = false
                 Log.d(LOG_TAG, "onRecordingStopped() saved to ${filePath}")
+                // set next video record params
+                serviceController.setupRecorder(prepareRecordParams())
             }
 
             override fun onNeedSetupMediaProjection() {
@@ -150,6 +153,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             while (isActive && !serviceController.connected) {
                 serviceController.startService()
+                delay(1000)
             }
             if (!isActive) return@launch
 
