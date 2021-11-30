@@ -1,6 +1,6 @@
 package com.metalichesky.screenrecorder.model
 
-enum class RecordingState {
+enum class RecordState {
     IDLE,
     PREPARED,
     RECORDING

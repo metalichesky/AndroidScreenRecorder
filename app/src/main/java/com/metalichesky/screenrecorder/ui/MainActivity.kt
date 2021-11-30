@@ -1,5 +1,6 @@
 package com.metalichesky.screenrecorder.ui
 
+import android.app.Activity.RESULT_OK
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -18,10 +19,7 @@ import com.metalichesky.screenrecorder.model.ScreenRecordParams
 import com.metalichesky.screenrecorder.repo.VideoRepo
 import com.metalichesky.screenrecorder.service.ScreenRecordingServiceController
 import com.metalichesky.screenrecorder.service.ScreenRecordingServiceListener
-import com.metalichesky.screenrecorder.util.FileUtils
-import com.metalichesky.screenrecorder.util.IntentUtils
-import com.metalichesky.screenrecorder.util.PermissionUtils
-import com.metalichesky.screenrecorder.util.Size
+import com.metalichesky.screenrecorder.util.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -38,11 +36,12 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var serviceController: ScreenRecordingServiceController
     private lateinit var videoRepo: VideoRepo
+    private var recordRequested: Boolean = false
 
     private val permissionsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { result ->
-        if (PermissionUtils.isPermissionsGranted(result)) {
+        if (PermissionUtils.isPermissionsGranted(result) && recordRequested) {
             tryStartRecording()
         }
     }
@@ -51,7 +50,15 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) { activityResult ->
         if (activityResult.resultCode == RESULT_OK) {
-            tryStartRecording(activityResult.resultCode, activityResult.data)
+            serviceController.setupMediaProjection(
+                MediaProjectionParams(
+                    resultCode = activityResult.resultCode,
+                    data = activityResult.data ?: Intent()
+                )
+            )
+            if (recordRequested) {
+                tryStartRecording()
+            }
         } else {
             Toast.makeText(
                 this,
@@ -60,10 +67,6 @@ class MainActivity : AppCompatActivity() {
             binding.toggle.isChecked = false
         }
     }
-
-    private val currentSysDate: String
-        get() = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())
-
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,7 +84,7 @@ class MainActivity : AppCompatActivity() {
     private fun setupService() {
         videoRepo = VideoRepo(applicationContext)
         serviceController = ScreenRecordingServiceController(applicationContext)
-        serviceController.listener = object: ScreenRecordingServiceListener {
+        serviceController.listener = object : ScreenRecordingServiceListener {
             override fun onRecordingStarted() {
                 binding.toggle.isChecked = true
             }
@@ -90,7 +93,9 @@ class MainActivity : AppCompatActivity() {
                 binding.toggle.isChecked = false
                 Log.d(LOG_TAG, "onRecordingStopped() saved to ${filePath}")
                 // set next video record params
-                serviceController.setupRecorder(prepareRecordParams())
+                prepareRecordParams()?.let {
+                    serviceController.setupRecorder(it)
+                }
             }
 
             override fun onNeedSetupMediaProjection() {
@@ -98,7 +103,9 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onNeedSetupMediaRecorder() {
-                serviceController.setupRecorder(prepareRecordParams())
+                prepareRecordParams()?.let {
+                    serviceController.setupRecorder(it)
+                }
             }
 
             override fun onServiceClosed() {
@@ -106,35 +113,57 @@ class MainActivity : AppCompatActivity() {
             }
         }
         lifecycleScope.launch {
-            binding.toggle.isEnabled = false
-            while(isActive && !serviceController.connected) {
+            binding.toggle.isEnabled = serviceController.connected
+            while (isActive && !serviceController.connected) {
                 serviceController.startService()
             }
             binding.toggle.isEnabled = serviceController.connected
-            serviceController.setupRecorder(prepareRecordParams())
+            if (serviceController.connected) {
+                prepareRecordParams()?.let {
+                    serviceController.setupRecorder(it)
+                }
+            }
         }
     }
 
-    private fun prepareRecordParams(): ScreenRecordParams {
-        val screenSize = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-            val windowMetrics = windowManager.currentWindowMetrics
-            Size(windowMetrics.bounds.width(), windowMetrics.bounds.height())
-        } else {
-            val displayMetrics = resources.displayMetrics
-            Size(displayMetrics.widthPixels, displayMetrics.heightPixels)
-        }
-        val screenDensity = resources.configuration.densityDpi
-        val recordWidth = screenSize.width / 2
-        val recordHeight = screenSize.height / 2
-        val recordSize = Size(recordWidth, recordHeight)
-        val videoFile = videoRepo.createVideoOutputFile(currentSysDate)
-        return ScreenRecordParams(
-            screenSize = screenSize,
-            screenDensity = screenDensity,
-            videoSize = recordSize,
-            videoFilePath = videoFile.absolutePath
+    private fun prepareRecordParams(): ScreenRecordParams? {
+        val permissionsGranted = PermissionUtils.isPermissionsGranted(
+            this@MainActivity,
+            PermissionUtils.READ_WRITE_PERMISSIONS
         )
+        return if (permissionsGranted) {
+            // read write external storage available
+            val screenSize = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                val windowMetrics = windowManager.currentWindowMetrics
+                Size(windowMetrics.bounds.width(), windowMetrics.bounds.height())
+            } else {
+                val displayMetrics = resources.displayMetrics
+                Size(displayMetrics.widthPixels, displayMetrics.heightPixels)
+            }
+            val screenDensity = resources.configuration.densityDpi
+            val recordWidth = screenSize.width / 2
+            val recordHeight = screenSize.height / 2
+            val recordSize = Size(recordWidth, recordHeight)
+            val currentSysDate = DateTimeUtils.formatDate(
+                DateTimeUtils.getCurrentDate(),
+                FileUtils.FILE_TIMESTAMP_DATE_PATTERN
+            )
+            val videoFile = videoRepo.createVideoOutputFile(currentSysDate)
+            ScreenRecordParams(
+                screenSize = screenSize,
+                screenDensity = screenDensity,
+                videoSize = recordSize,
+                videoFilePath = videoFile.absolutePath
+            )
+        } else {
+            null
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        maybeRequestPermissions()
     }
 
     override fun onDestroy() {
@@ -150,37 +179,44 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun tryStartRecording() {
+        recordRequested = true
         lifecycleScope.launch {
+            binding.toggle.isChecked = serviceController.connected
             while (isActive && !serviceController.connected) {
                 serviceController.startService()
-                delay(1000)
             }
+            binding.toggle.isChecked = serviceController.connected
             if (!isActive) return@launch
 
             val permissions =
                 PermissionUtils.RECORD_AUDIO_PERMISSIONS + PermissionUtils.READ_WRITE_PERMISSIONS
-            val permissionsGranted = PermissionUtils.isPermissionsGranted(this@MainActivity, permissions)
+            val permissionsGranted =
+                PermissionUtils.isPermissionsGranted(this@MainActivity, permissions)
             val mediaProjectionConfigured = serviceController.isMediaProjectionConfigured()
             val recorderConfigured = serviceController.isRecorderConfigured()
             if (permissionsGranted && !recorderConfigured) {
-                serviceController.setupRecorder(prepareRecordParams())
+                prepareRecordParams()?.let {
+                    serviceController.setupRecorder(it)
+                }
             }
             if (permissionsGranted && mediaProjectionConfigured) {
                 startRecording()
             } else if (!permissionsGranted) {
-                permissionsLauncher.launch(permissions)
+                maybeRequestPermissions()
             } else if (!mediaProjectionConfigured) {
                 recordScreenLauncher.launch(IntentUtils.getScreenCaptureIntent(this@MainActivity))
             }
         }
     }
 
-    private fun tryStartRecording(resultCode: Int, data: Intent?) {
-        serviceController.setupMediaProjection(MediaProjectionParams(
-            resultCode = resultCode,
-            data = data ?: Intent()
-        ))
-        tryStartRecording()
+    private fun maybeRequestPermissions() {
+        val permissions =
+            PermissionUtils.RECORD_AUDIO_PERMISSIONS + PermissionUtils.READ_WRITE_PERMISSIONS
+        val permissionsGranted =
+            PermissionUtils.isPermissionsGranted(this@MainActivity, permissions)
+        if (!permissionsGranted) {
+            permissionsLauncher.launch(permissions)
+        }
     }
 
     private fun startRecording() {
@@ -188,6 +224,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun stopRecording() {
+        recordRequested = false
         serviceController.stopRecording()
     }
 }
